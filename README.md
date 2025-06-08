@@ -264,3 +264,4 @@ Anecdotal evidence from AWS documentation and examples suggests that pgcollectio
 More benchmarking is needed in real-world scenarios, especially under concurrency and stress conditions, to validate these claims.
 
 
+pgcollection is a memory-optimized key-value collection data type for PostgreSQL, designed primarily for high-performance in-memory operations within PL/pgSQL functions. It mimics associative arrays but provides more control over element types, ordering, and iteration.

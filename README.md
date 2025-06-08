@@ -72,3 +72,10 @@ Importantly, the use of pgtt also reduces catalog bloat. In systems that create 
 
 
 Users can create indexes and constraints on GTTs, with the exception of foreign key constraints. Attempting to declare referential integrity relationships on GTTs will result in an error. This restriction is intentional and designed to mimic enterprise RDBMS systems like Oracle and DB2, where temporary tables are isolated and do not enforce foreign keys to permanent tables.
+
+
+
+Summary of What This Tells Us
+Loading the extension has almost no measurable performance cost, which makes it viable to preload in environments where it may be used conditionally.
+Runtime performance of pgtt is comparable to native PostgreSQL temporary tables, even though pgtt uses rerouting and internal logic. This validates its efficiency and makes it suitable for production environments where Oracle-style GTT semantics are required.
+The rerouting mechanism does not add significant latency, and in fact performs slightly better in high-connection scenarios due to the absence of repeated DDL.

@@ -170,3 +170,39 @@ Despite its cleverness, pg_global_temp_tables has only 18 stars, 4 watchers, and
 | **Schema-qualified Access**                | ✅ Always enabled via search_path       | ✅ Fully supported via view layer                | ❌ No (`pg_temp` not schema-qualified) |
 | **RDS Compatibility**                      | ⚠️ Limited (needs preload setting)      | ✅ Works without superuser                       | ✅ Fully supported                   |
 | **Maintenance Activity**                   | ✅ Actively maintained (v4.2, 2025)      | ❌ Inactive (18 stars, no recent commits)        | ✅ Core PostgreSQL                   |
+
+
+
+
+
+1. Choose pgtt
+
+Pros:
+
+Offers robust emulation of Oracle-style GTTs with true schema-qualified access and session-local data.
+Simplifies migrations by preserving application-level query syntax.
+Actively maintained with recent performance, documentation, and compatibility fixes (v4.2 as of June 2025).
+Cons:
+
+Requires session_preload_libraries, limiting use in Amazon RDS unless applied by a privileged role.
+Involves internal rerouting, which may cause complications in environments using logical replication or strict audit logging.
+Adds system complexity due to its reliance on catalog metadata and internal hooks.
+Not suitable in multi-tenant shared environments without strong access controls.
+Recommended when:
+
+You are migrating from Oracle and need compatibility with CREATE GLOBAL TEMPORARY TABLE semantics.
+Your environment supports session_preload_libraries (e.g., self-managed PostgreSQL or RDS with admin control).
+You need centralized GTT definitions with automatic per-session isolation.
+2. Defer pgtt Adoption
+
+Pros:
+
+Reduces operational and security complexity, especially in managed cloud environments.
+Maintains full compatibility with PostgreSQL’s logical replication and audit tools.
+Leverages well-understood native behavior without introducing additional abstractions.
+Allows future reconsideration if RDS eventually supports session preload extensions at finer granularity.
+Cons:
+
+Requires application logic to explicitly define and manage TEMP tables in each session.
+Misses out on centralizing temporary table definitions for reuse.
+May result in catalog bloat under heavy use of ad hoc temporary tables.

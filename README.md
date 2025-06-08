@@ -206,3 +206,35 @@ Cons:
 Requires application logic to explicitly define and manage TEMP tables in each session.
 Misses out on centralizing temporary table definitions for reuse.
 May result in catalog bloat under heavy use of ad hoc temporary tables.
+
+
+
+To evaluate both passive and active performance implications of the pgtt extension, a series of pgbench tests were conducted in a TPC-B–like scenario. These tests measure transactions per second (TPS) under various configurations.
+
+Overhead of Loading the Extension (Not Used)
+
+Without loading the extension:
+
+number of transactions actually processed: 51741
+latency average = 23.201 ms
+tps = 862.165341 (excluding connections establishing)
+With pgtt loaded but not used:
+
+number of transactions actually processed: 51171
+latency average = 23.461 ms
+tps = 852.599010 (excluding connections establishing)
+Observation: Loading the extension via session_preload_libraries introduces only a 1.1% TPS drop, indicating negligible overhead when pgtt is not actively used.
+
+Performance: Regular TEMP Table vs. pgtt GTT
+
+Using a regular temporary table:
+
+number of transactions actually processed: 17153
+latency average = 70.058 ms
+tps = 285.514186 (excluding connections establishing)
+Using a pgtt-based global temporary table:
+
+number of transactions actually processed: 17540
+latency average = 68.495 ms
+tps = 292.028832 (excluding connections establishing)
+Observation: When actively used, pgtt performs slightly better than native PostgreSQL TEMP tables in this scenario, with a ~2.3% TPS improvement and lower average latency. This may be due to reduced catalog activity and session reuse, as pgtt avoids repeated DDL by reusing the same template definition across transactions.

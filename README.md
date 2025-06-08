@@ -69,3 +69,6 @@ The pgtt extension fills this gap by emulating global temporary table behavior w
 The extension supports common table features such as LIKE clauses and AS SELECT ... WITH DATA. These allow the user to initialize a GTT with structure or data during creation, with the data applying only to the current session. However, pgtt does not support ON COMMIT DROP, which is available in native PostgreSQL temp tables. Instead, it strictly supports ON COMMIT DELETE ROWS and ON COMMIT PRESERVE ROWS, mirroring the Oracle behavior where the table persists and only the rows are conditionally cleared.
 
 Importantly, the use of pgtt also reduces catalog bloat. In systems that create and drop large numbers of temporary tables, repeated DDL operations can clutter PostgreSQL’s internal catalogs, degrading performance over time.
+
+
+Users can create indexes and constraints on GTTs, with the exception of foreign key constraints. Attempting to declare referential integrity relationships on GTTs will result in an error. This restriction is intentional and designed to mimic enterprise RDBMS systems like Oracle and DB2, where temporary tables are isolated and do not enforce foreign keys to permanent tables.

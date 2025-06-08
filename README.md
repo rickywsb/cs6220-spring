@@ -79,3 +79,32 @@ Summary of What This Tells Us
 Loading the extension has almost no measurable performance cost, which makes it viable to preload in environments where it may be used conditionally.
 Runtime performance of pgtt is comparable to native PostgreSQL temporary tables, even though pgtt uses rerouting and internal logic. This validates its efficiency and makes it suitable for production environments where Oracle-style GTT semantics are required.
 The rerouting mechanism does not add significant latency, and in fact performs slightly better in high-connection scenarios due to the absence of repeated DDL.
+
+
+Security Analysis
+While the pgtt extension provides powerful functionality for emulating global temporary tables, it introduces several security and operational concerns, particularly in managed environments such as Amazon RDS where user privilege separation and auditability are critical. The following concerns should be considered before adopting the extension:
+
+1. Requires session_preload_libraries, which depends on superuser privileges
+
+In order for the extension to intercept temporary table creation and enable rerouting, pgtt must be loaded at session startup using session_preload_libraries. However, in RDS PostgreSQL, only the rds_superuser role has permission to modify this setting via the DB parameter group. This means that:
+
+Regular users cannot dynamically enable pgtt in their sessions.
+The extension must be preloaded globally across all sessions, even those not using GTTs, slightly increasing the attack surface.
+In multi-tenant or hosted environments, globally preloading extensions that alter query execution logic is generally discouraged due to the potential for unexpected cross-session behavior and reduced control granularity.
+
+2. Data is stored in unlogged tables — no crash recovery
+
+The underlying “template” table used by pgtt is an unlogged table, and the dynamically created session-local temp tables are standard PostgreSQL temporary tables, which are also unlogged. This means:
+
+If the server crashes unexpectedly, any in-flight data stored in GTTs is lost.
+While this may be acceptable for typical temporary workloads, it violates durability guarantees expected in PCI/GDPR-compliant environments.
+Users must be clearly informed that data in GTTs is never recoverable after crash.
+Although this behavior aligns with native PostgreSQL TEMP tables, the presence of persistent schema-level definitions in pgtt may mislead users into assuming partial durability.
+
+3. Query rerouting can interfere with logical replication or auditing
+
+pgtt works by rewriting queries after parsing, redirecting them from the pgtt_schema table to the corresponding pg_temp version. This rerouting is internal and not visible in the final query plan or audit logs. Consequently:
+
+Logical decoding tools like AWS DMS or Debezium may misinterpret the query, as the table OID referenced does not match what is seen in the WAL stream.
+Auditing and query logging systems might log the original query (SELECT * FROM pgtt_schema.tt) rather than what was actually executed (SELECT * FROM pg_temp.tt), reducing traceability.
+This undermines the predictability and transparency required in regulated environments.

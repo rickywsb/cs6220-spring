@@ -108,3 +108,38 @@ pgtt works by rewriting queries after parsing, redirecting them from the pgtt_sc
 Logical decoding tools like AWS DMS or Debezium may misinterpret the query, as the table OID referenced does not match what is seen in the WAL stream.
 Auditing and query logging systems might log the original query (SELECT * FROM pgtt_schema.tt) rather than what was actually executed (SELECT * FROM pg_temp.tt), reducing traceability.
 This undermines the predictability and transparency required in regulated environments.
+
+
+
+### Preliminary Performance Assessment
+
+The following performance observations are based on benchmark results published in the official `pgtt` documentation. While they offer useful insight into expected behavior, these results should be independently validated in production-like environments before making adoption decisions.
+
+#### 1. Minimal Overhead When Loaded But Not Used
+
+Benchmark tests using `pgbench` in a TPC-B–like scenario indicate that simply loading the `pgtt` extension does not introduce meaningful overhead if it is not actively used.
+
+- **Without extension**: 862 TPS  
+- **With extension loaded**: 852 TPS
+
+The performance difference is approximately 1.1%, suggesting that preloading `pgtt` via `session_preload_libraries` introduces negligible cost in typical workloads where GTTs are not invoked. This supports its safe inclusion in shared environments, assuming proper access controls are in place.
+
+#### 2. Comparable Performance to Native TEMP Tables
+
+The benchmark also compares runtime performance between PostgreSQL native temporary tables and `pgtt`-based Global Temporary Tables:
+
+- **Using native TEMP tables**: 285 TPS  
+- **Using `pgtt` GTTs**: 292 TPS
+
+Despite its use of rerouting and dynamic temporary table creation, `pgtt` slightly outperforms native TEMP tables in this scenario. This marginal gain (~2.3%) may be due to reduced DDL overhead, since `pgtt` defines each table only once and instantiates the session-local copy on first access. Regular TEMP tables, by contrast, may incur more catalog and locking overhead when repeatedly created and dropped.
+
+#### Summary of What This Tells Us
+
+While the `pgtt` extension introduces two mechanisms that could theoretically impact performance—session-level library loading and runtime query rerouting—the benchmark results suggest that these mechanisms have little to no negative effect in practice. In fact, under certain conditions, `pgtt` may even slightly improve throughput due to reduced catalog churn and session-level reuse of temporary structures.
+
+- Loading the extension has almost no measurable performance cost, making it viable to preload in environments where it may be used conditionally.
+- Runtime performance of `pgtt` is comparable to, and sometimes slightly better than, native PostgreSQL temporary tables.
+- The rerouting mechanism does not introduce significant latency and may provide optimization benefits in high-concurrency environments.
+
+> _Note: These results are drawn from the `pgtt` extension’s own performance documentation. While promising, they should be considered preliminary. Independent benchmarking under representative production conditions is still recommended to validate these results and assess performance impact in real-world workloads._
+

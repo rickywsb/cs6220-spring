@@ -238,3 +238,29 @@ number of transactions actually processed: 17540
 latency average = 68.495 ms
 tps = 292.028832 (excluding connections establishing)
 Observation: When actively used, pgtt performs slightly better than native PostgreSQL TEMP tables in this scenario, with a ~2.3% TPS improvement and lower average latency. This may be due to reduced catalog activity and session reuse, as pgtt avoids repeated DDL by reusing the same template definition across transactions.
+
+
+
+
+1. Goal
+Evaluate whether the pgcollection extension should be included in our RDS PostgreSQL extension support list. Specifically, assess its design, use cases, performance characteristics, security implications, and suitability for production workloads involving complex PL/pgSQL logic and in-memory key-value manipulation.
+
+2. Background
+pgcollection is a memory-optimized collection type for PostgreSQL, designed primarily for use inside PL/pgSQL functions. It allows efficient manipulation of key-value pairs with deterministic iteration and minimal context switching. All elements are of the same type and stored in insertion order. Collections are implemented as varlena structures, meaning they can be passed around as values in PL/pgSQL and optionally persisted (up to 1GB) in tables.
+
+Compared to traditional PostgreSQL constructs (arrays, temp tables, or hstore/jsonb), pgcollection offers more predictable iteration, type safety, and performance benefits in high-frequency procedural logic scenarios. Community adoption is currently limited, but the extension is maintained by AWS and supports PostgreSQL 14+.
+
+3. License
+pgcollection is open-source under the PostgreSQL License, which is permissive and widely accepted. It poses no legal barrier to internal or commercial use.
+
+4. Security Analysis
+Memory safety: pgcollection uses in-memory data structures and does not rely on on-disk state by default, reducing persistence risk but increasing scrutiny on memory access patterns.
+Custom wait events: PostgreSQL 17+ support adds introspectability via custom wait events, enabling deeper performance and correctness tracking.
+Context switching: The internal structure must sometimes convert between "expanded" and "flat" formats, which may introduce performance or security implications if unbounded data is involved.
+Resource consumption: Since it operates entirely in memory and can grow up to 1GB, improper use or misuse in loops or functions may impact backend process memory stability.
+5. Performance Considerations
+Anecdotal evidence from AWS documentation and examples suggests that pgcollection performs significantly faster than temporary tables or arrays for iterative operations. The absence of context switches in key-value operations and built-in sort/iteration support make it well-suited for complex control flows.
+
+More benchmarking is needed in real-world scenarios, especially under concurrency and stress conditions, to validate these claims.
+
+

@@ -145,3 +145,28 @@ While the `pgtt` extension introduces two mechanisms that could theoretically im
 
 
 Following the security analysis, it is equally important to evaluate the potential performance impact of introducing the pgtt extension. In managed environments like Amazon RDS, where session_preload_libraries and query rerouting mechanisms may introduce latency or affect scalability, understanding runtime behavior is critical. This section examines whether these mechanisms cause measurable overhead during execution, and whether pgtt performs comparably to native PostgreSQL temporary tables under typical transactional workloads. The goal is to provide data-driven insight into whether the extension is suitable for performance-sensitive deployments.
+
+
+
+
+
+pg_global_temp_tables achieves Oracle-style GTT behavior by defining a view over a table-returning function and attaching INSTEAD OF triggers to simulate DML operations. The key idea is that the view remains accessible under a schema-qualified name, while the actual data is stored in a native TEMP table created dynamically per session. This allows application SQL (e.g., SELECT * FROM schema.temp_table) to work without modification—similar to Oracle—while isolating session data using standard PostgreSQL mechanisms. However, this architecture introduces more moving parts and depends heavily on trigger logic.
+
+Despite its cleverness, pg_global_temp_tables has only 18 stars, 4 watchers, and 5 forks on GitHub. Its last update was over a year ago, and the project does not appear to be actively maintained. While it solves a real problem, its reliance on function-view-trigger plumbing makes it harder to manage, and less transparent at runtime than pgtt.
+
+
+| Feature / Criteria                          | `pgtt` (pg_temp_template)               | `pg_global_temp_tables`                           | Native `pg_temp` Tables              |
+|--------------------------------------------|----------------------------------------|--------------------------------------------------|--------------------------------------|
+| **Global Table Definition**                | ✅ Stored as persistent template table  | ✅ Achieved via view/function/trigger            | ❌ Redefined per session             |
+| **Session-local Data Isolation**           | ✅ Yes (via rerouted temp instance)     | ✅ Yes (via session-created temp table)          | ✅ Yes                               |
+| **Requires `session_preload_libraries`**   | ✅ Yes                                  | ❌ No                                            | ❌ No                                |
+| **Compatible with Oracle-style GTTs**      | ✅ Closely mimics syntax & semantics    | ✅ Query syntax compatible with Oracle           | ❌ No                                |
+| **Query Rerouting Mechanism**              | ✅ Internal rerouting at access         | ❌ View + triggers manage session scoping        | ❌ Not applicable                    |
+| **Performance Overhead**                   | ⬤ Minimal (~1%)                        | ⬤ Moderate (trigger overhead)                   | ✅ Very low                          |
+| **Crash Recovery**                         | ❌ No (uses unlogged template tables)   | ❌ No (temp tables not crash-safe)               | ❌ No                                |
+| **Logical Replication Compatibility**      | ⚠️ Potential issues with rerouting      | ✅ Safe (no parser hooks)                        | ✅ Fully compatible                  |
+| **Foreign Key Support**                    | ❌ Not supported                        | ❌ Not supported                                 | ✅ Supported                         |
+| **DDL Simplicity**                         | ✅ CREATE /*GLOBAL*/ TEMP TABLE         | ❌ Requires multiple steps and functions         | ✅ Standard SQL                      |
+| **Schema-qualified Access**                | ✅ Always enabled via search_path       | ✅ Fully supported via view layer                | ❌ No (`pg_temp` not schema-qualified) |
+| **RDS Compatibility**                      | ⚠️ Limited (needs preload setting)      | ✅ Works without superuser                       | ✅ Fully supported                   |
+| **Maintenance Activity**                   | ✅ Actively maintained (v4.2, 2025)      | ❌ Inactive (18 stars, no recent commits)        | ✅ Core PostgreSQL                   |

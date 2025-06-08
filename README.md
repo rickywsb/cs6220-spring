@@ -56,3 +56,11 @@ Renaming / Dropping: Both operations are blocked if the temporary table has been
 Schema relocation: By default, pgtt tables are not relocatable, but advanced configuration allows it for use cases requiring fixed schema names.
 pg_dump / restore: Template tables and catalog metadata are included in dumps, allowing full restoration of the GTT setup.
 This model allows applications to use global temporary tables in PostgreSQL with consistent session-local isolation, while maintaining persistence and visibility for administrative tasks.
+
+
+2. Background and Functional Comparison
+A Global Temporary Table (GTT) is a database object that allows all sessions to share the same table definition (schema), while maintaining session-local visibility of the table’s data. This means multiple users or connections can access the same table name and structure, but each sees only their own data. Unlike regular temporary tables in PostgreSQL—which must be explicitly created in every session and discarded afterward—a GTT is defined once and reused across sessions, reducing overhead and ensuring schema consistency. This model is widely supported in Oracle and other enterprise databases, and is especially useful in OLTP systems where temporary data is processed per user but must follow a shared structure (e.g., staging data, session caches, or ETL pipelines).
+
+PostgreSQL does not natively support global temporary tables. Its temporary tables are entirely session-scoped, meaning both the definition and data exist only for the lifetime of a session. This limitation can introduce overhead in applications that require repeated creation of identical temporary tables, or in systems migrating from Oracle where GTTs are extensively used.
+
+The pgtt extension fills this gap by emulating global temporary table behavior within PostgreSQL’s extension framework. It separates the definition of the table from the data, storing the former as a persistent "template" table and dynamically creating session-local temporary instances at runtime. This allows applications to interact with GTTs as if they were natively supported.

@@ -64,3 +64,8 @@ A Global Temporary Table (GTT) is a database object that allows all sessions to 
 PostgreSQL does not natively support global temporary tables. Its temporary tables are entirely session-scoped, meaning both the definition and data exist only for the lifetime of a session. This limitation can introduce overhead in applications that require repeated creation of identical temporary tables, or in systems migrating from Oracle where GTTs are extensively used.
 
 The pgtt extension fills this gap by emulating global temporary table behavior within PostgreSQL’s extension framework. It separates the definition of the table from the data, storing the former as a persistent "template" table and dynamically creating session-local temporary instances at runtime. This allows applications to interact with GTTs as if they were natively supported.
+
+
+The extension supports common table features such as LIKE clauses and AS SELECT ... WITH DATA. These allow the user to initialize a GTT with structure or data during creation, with the data applying only to the current session. However, pgtt does not support ON COMMIT DROP, which is available in native PostgreSQL temp tables. Instead, it strictly supports ON COMMIT DELETE ROWS and ON COMMIT PRESERVE ROWS, mirroring the Oracle behavior where the table persists and only the rows are conditionally cleared.
+
+Importantly, the use of pgtt also reduces catalog bloat. In systems that create and drop large numbers of temporary tables, repeated DDL operations can clutter PostgreSQL’s internal catalogs, degrading performance over time.

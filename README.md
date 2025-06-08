@@ -143,3 +143,5 @@ While the `pgtt` extension introduces two mechanisms that could theoretically im
 
 > _Note: These results are drawn from the `pgtt` extension’s own performance documentation. While promising, they should be considered preliminary. Independent benchmarking under representative production conditions is still recommended to validate these results and assess performance impact in real-world workloads._
 
+
+Following the security analysis, it is equally important to evaluate the potential performance impact of introducing the pgtt extension. In managed environments like Amazon RDS, where session_preload_libraries and query rerouting mechanisms may introduce latency or affect scalability, understanding runtime behavior is critical. This section examines whether these mechanisms cause measurable overhead during execution, and whether pgtt performs comparably to native PostgreSQL temporary tables under typical transactional workloads. The goal is to provide data-driven insight into whether the extension is suitable for performance-sensitive deployments.

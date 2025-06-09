@@ -1,0 +1,29 @@
+💡 实现方式相关
+Why did you choose to use ExpandedObjectHeader instead of a lighter struct or native C struct for in-memory layout?
+→ 想了解使用 PostgreSQL 内部的 expanded object API 而不是自定义结构的原因，是为了更好地集成 PG 内核，还是为了实现 flatten/expand？
+What are the design tradeoffs between using uthash versus using PostgreSQL’s own hash table infrastructure (e.g., dynahash)?
+→ uthash 是轻量但没有内建的 memory context 支持，PG 内置的 hash table 可能集成更紧密。
+Is it safe to use a collection type as a field in composite types or pass between functions that cross memory contexts?
+→ 当前 memory context 隔离策略是否允许跨函数安全使用，flatten 是否是必要步骤？
+Why limit to only text as key? Any plans to support other key types like int or uuid in the future?
+→ 目前只支持 text 类型 key，但实际业务中常见 int/uuid 作为主键。
+Why isn't there support for nested collections (collections inside collections)?
+→ 是否有设计限制，或只是 v1 尚未支持？是否有计划实现类似嵌套 map 结构？
+
+
+
+What are the advantages of pgcollection over JSON?
+1. Strongly typed values
+Unlike JSON, which stores data as untyped strings or loosely structured objects, pgcollection enforces a consistent data type for all values. When you create a collection, you can define that all values must be text, integer, date, or even complex types like record. This helps catch type errors early and allows PostgreSQL to optimize memory and operations more efficiently.
+
+2. Fast key-based access (O(1) vs. linear search)
+pgcollection uses an internal hash table (via uthash) to store and retrieve key-value pairs. This means accessing a value by key takes constant time, regardless of the size of the collection. In contrast, accessing a value in a JSON object within PL/pgSQL often involves parsing the entire structure and doing a linear scan, which becomes slower as the JSON grows.
+
+3. Optimized for in-memory usage
+pgcollection is designed for temporary, high-speed operations inside functions, especially in PL/pgSQL. All data lives in memory and never touches disk unless explicitly saved. This makes it ideal for use cases like caching, aggregation, or building intermediate results during a complex computation.
+
+4. Native subscript syntax
+Accessing elements in a collection is straightforward and readable: collection['key'] := 'value'; or collection['key']. There’s no need to cast or extract from a JSON blob using functions like ->> or jsonb_extract_path_text(). This syntax improves developer productivity and clarity.
+
+5. Built-in iteration tools
+pgcollection supports iterators like first(), next(), key(), and value() to loop over elements in order. This is more natural and efficient than trying to unpack and traverse a JSON structure inside a PL/pgSQL loop. You don’t need to call jsonb_each() or convert JSON into a temporary table — pgcollection provides direct, in-memory iteration.

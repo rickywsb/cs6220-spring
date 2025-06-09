@@ -1,3 +1,6 @@
+session-specific. This allows applications to define and reuse temporary table schemas across sessions without recreating the structure each time, while still maintaining isolation of the data. 
+
+
 CREATE GTT (with GLOBAL) ─────┐
                              │
      Create template table   ▼

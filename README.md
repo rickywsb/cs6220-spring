@@ -498,3 +498,66 @@ Session-level or transaction-level in-memory caching
 Avoiding repeated table scans in functions
 Fast key lookups and bulk data manipulation
 Efficient control of memory context and usage tracking via observability
+
+
+DO
+$$
+DECLARE
+  t_capital  collection;
+BEGIN
+  t_capital['USA']            := 'Washington, D.C.';
+  t_capital['United Kingdom'] := 'London';
+  t_capital['Japan']          := 'Tokyo';
+
+  RAISE NOTICE 'The capital of USA is %', t_capital['USA'];
+END
+$$;
+
+
+DO
+$$
+DECLARE
+  t_capital  collection;
+BEGIN
+  t_capital['USA']            := 'Washington, D.C.';
+  t_capital['United Kingdom'] := 'London';
+  t_capital['Japan']          := 'Tokyo';
+
+  t_capital := first(t_capital);
+  WHILE NOT isnull(t_capital) LOOP
+    RAISE NOTICE 'The capital of % is %', key(t_capital), value(t_capital);
+    t_capital := next(t_capital);
+  END LOOP;
+END
+$$;
+
+DO
+$$
+DECLARE
+  t_capital  collection;
+BEGIN
+  t_capital['USA']            := 'Washington, D.C.';
+  t_capital['United Kingdom'] := 'London';
+  t_capital['Japan']          := 'Tokyo';
+
+  t_capital := sort(t_capital);
+  WHILE NOT isnull(t_capital) LOOP
+    RAISE NOTICE 'Sorted key: %', key(t_capital);
+    t_capital := next(t_capital);
+  END LOOP;
+END
+$$;
+
+DO
+$$
+DECLARE
+  r       pg_tablespace%ROWTYPE;
+  c       collection('pg_tablespace');
+BEGIN
+  FOR r IN SELECT pg_tablespace.* FROM pg_tablespace LOOP
+    c[r.spcname] := r;
+  END LOOP;
+
+  RAISE NOTICE 'The owner of pg_default is %', c['pg_default'].spcowner::regrole;
+END
+$$;

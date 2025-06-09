@@ -335,3 +335,166 @@ If you are developing functions that require frequent lookups, ordered traversal
 
 Defer pgcollection
 If your use cases do not involve complex in-memory object handling, or if the operational environment is constrained by strict extension policies, you may choose to defer adoption. Alternatives, though slower or less elegant, remain fully supported and less maintenance-intensive. Additionally, if preserving familiarity and minimal extension installs are priorities, it may be prudent to wait until pgcollection sees wider adoption or further version maturity.
+
+
+
+1. Creating and Assigning a Collection
+DO
+$$
+DECLARE
+  t_capital  collection;
+BEGIN
+  t_capital['USA']            := 'Washington, D.C.';
+  t_capital['United Kingdom'] := 'London';
+  t_capital['Japan']          := 'Tokyo';
+
+  RAISE NOTICE 'The capital of USA is %', t_capital['USA'];
+END
+$$;
+Explanation:
+This snippet demonstrates how to create a collection and assign key-value pairs to it using subscript syntax. Each key is a text value and must be unique. This structure behaves like a hash map stored entirely in memory, with no disk interaction, making it optimal for use inside PL/pgSQL functions.
+
+✅ 2. Iterating Over a Collection with first() and next()
+DO
+$$
+DECLARE
+  t_capital  collection;
+BEGIN
+  t_capital['USA']            := 'Washington, D.C.';
+  t_capital['United Kingdom'] := 'London';
+  t_capital['Japan']          := 'Tokyo';
+
+  t_capital := first(t_capital);
+  WHILE NOT isnull(t_capital) LOOP
+    RAISE NOTICE 'The capital of % is %', key(t_capital), value(t_capital);
+    t_capital := next(t_capital);
+  END LOOP;
+END
+$$;
+Explanation:
+This shows how to traverse a collection using the built-in iterator. first() moves the pointer to the first element, and next() iterates through the remaining elements. isnull() returns true once the iterator reaches the end. key() and value() extract the current key and value, respectively.
+
+✅ 3. Sorting a Collection by Keys
+DO
+$$
+DECLARE
+  t_capital  collection;
+BEGIN
+  t_capital['USA']            := 'Washington, D.C.';
+  t_capital['United Kingdom'] := 'London';
+  t_capital['Japan']          := 'Tokyo';
+
+  t_capital := sort(t_capital);
+  WHILE NOT isnull(t_capital) LOOP
+    RAISE NOTICE 'Sorted key: %', key(t_capital);
+    t_capital := next(t_capital);
+  END LOOP;
+END
+$$;
+Explanation:
+The sort() function reorders the collection by key using collation order. This can be useful if you want to process the collection in a deterministic sequence rather than insertion order.
+
+✅ 4. Using to_table() to Return Collection as Table
+DO
+$$
+DECLARE
+  t_capital  collection;
+  r          record;
+BEGIN
+  t_capital['USA']            := 'Washington, D.C.';
+  t_capital['UK']             := 'London';
+  t_capital['Japan']          := 'Tokyo';
+
+  FOR r IN SELECT * FROM to_table(t_capital) LOOP
+    RAISE NOTICE 'Key = %, Value = %', r.key, r.value;
+  END LOOP;
+END
+$$;
+Explanation:
+This allows converting the entire collection to a virtual table of key-value pairs. It is especially useful for interacting with standard SQL constructs like SELECT, JOIN, and UPDATE.
+
+✅ 5. Updating a Table Using Collection Content
+DO
+$$
+DECLARE
+  t_capital  collection;
+BEGIN
+  t_capital['USA'] := 'Washington, D.C.';
+  t_capital['UK']  := 'London';
+
+  UPDATE countries
+     SET capital = col.value
+    FROM to_table(t_capital) AS col
+   WHERE countries.name = col.key;
+END
+$$;
+Explanation:
+This shows how to use a collection to perform bulk updates on a table using the to_table() function. It avoids row-by-row iteration and benefits from SQL engine optimizations.
+
+✅ 6. Storing Composite (Row) Types in Collections
+DO
+$$
+DECLARE
+  r pg_tablespace%ROWTYPE;
+  c collection('pg_tablespace');
+BEGIN
+  FOR r IN SELECT * FROM pg_tablespace LOOP
+    c[r.spcname] := r;
+  END LOOP;
+
+  RAISE NOTICE 'The owner of pg_default is %', c['pg_default'].spcowner::regrole;
+END
+$$;
+Explanation:
+Collections can store not just primitive types but also full row types. In this case, a full row from the pg_tablespace system catalog is stored as a value. This supports complex caching of query results with structured access later.
+
+✅ 7. Extracting All Keys with keys_to_table()
+FOR r IN SELECT * FROM keys_to_table(t_capital) LOOP
+  RAISE NOTICE 'Key = %', r.k;
+END LOOP;
+Explanation:
+This snippet extracts all keys from a collection as a set-returning function. It is a compact way to get just the keys without values.
+
+✅ 8. Bulk Load Using FOR Loop
+DO
+$$
+DECLARE
+  r       pg_tablespace%ROWTYPE;
+  c       collection('pg_tablespace');
+BEGIN
+  FOR r IN SELECT pg_tablespace.* FROM pg_tablespace LOOP
+    c[r.spcname] := r;
+  END LOOP;
+
+  RAISE NOTICE 'The owner of pg_default is %', c['pg_default'].spcowner::regrole;
+END
+$$;
+Explanation:
+For efficient caching, a common pattern is to bulk load the result of a query into a collection. This is ideal in PL/pgSQL functions that need to refer to the same data multiple times.
+
+✅ 9. Bulk DML Using to_table()
+DO
+$$
+DECLARE
+  t_capital  collection;
+BEGIN
+  t_capital['USA']            := 'Washington, D.C.';
+  t_capital['United Kingdom'] := 'London';
+  t_capital['Japan']          := 'Tokyo';
+
+  UPDATE countries
+     SET capital = col.value
+    FROM to_table(t_capital) AS col
+   WHERE countries.name = col.key;
+END
+$$;
+Explanation:
+This use case highlights performance. Instead of iterating in PL/pgSQL, you can do set-based DML, leveraging collection content directly.
+
+Summary
+These examples demonstrate that pgcollection offers a memory-only, type-safe, and performant associative array structure tightly integrated with PostgreSQL’s type system and procedural language. It is well-suited for:
+
+Session-level or transaction-level in-memory caching
+Avoiding repeated table scans in functions
+Fast key lookups and bulk data manipulation
+Efficient control of memory context and usage tracking via observability

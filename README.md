@@ -265,3 +265,73 @@ More benchmarking is needed in real-world scenarios, especially under concurrenc
 
 
 pgcollection is a memory-optimized key-value collection data type for PostgreSQL, designed primarily for high-performance in-memory operations within PL/pgSQL functions. It mimics associative arrays but provides more control over element types, ordering, and iteration.
+
+
+
+
+
+
+
+1. Goal 🎯
+
+The objective of this investigation is to determine whether the pgcollection extension is suitable for adoption as a supported PostgreSQL extension—particularly in Amazon RDS environments. Evaluation criteria include its architecture, real-world performance, compatibility with existing PostgreSQL features, licensing considerations, and risk profile.
+
+2. Background
+
+pgcollection is an AWS-developed extension that creates a memory‑optimized key‑value data type named collection. This type is designed to work within PL/pgSQL functions and offers high-performance data structures without the need for temporary tables or external systems. Internally, it stores key-value pairs in insertion order, ensuring quick lookup, efficient iteration, and optional persistence.
+
+Under PostgreSQL’s native capabilities, developers must resort to less streamlined options like arrays, temporary tables, hstore/jsonb, or record variables. While functional, these alternatives suffer from trade-offs in type safety, iteration control, performance, or code complexity. pgcollection addresses these by providing a high-speed, in-memory collection with predictable behavior and low CPU and I/O cost.
+
+3. Workflow and Example
+
+Internally, pgcollection defines collection as a varlena-type with two distinct internal forms: a memory-resident expanded structure and a flattened, serialized format suitable for SQL-level usage or storage.
+
+When a collection is manipulated in PL/pgSQL—for instance via c['USA'] := 'Washington';—the data resides in an in-memory expanded object. This object maintains a hash table powered by the uthash library for average O(1) key lookup and a linked list for ordered traversal. When the function or query finishes, the engine calls collection_flatten_into() to serialize it into a self-contained binary blob suitable for returning or storing.
+
+Upon access again, such as another PL/pgSQL call using the value, DatumGetExpandedCollection() inflates the blob back into live memory, reconstructing the hash table and linked list. Throughout this process, all operations—from add to sort, find, first, and next—are implemented in efficient C, ensuring performant execution.
+
+You might see a sequence like:
+
+DO $$
+DECLARE
+  c collection;
+BEGIN
+  c['Germany'] := 'Berlin';
+  c := first(c);
+  WHILE NOT isnull(c) LOOP
+    RAISE NOTICE '% → %', key(c), value(c);
+    c := next(c);
+  END LOOP;
+END
+$$;
+Here, everything from key assignment to iteration runs entirely in memory, avoiding disk I/O, hash table overhead, or catalog activity.
+
+4. Analysis
+
+Licensing
+pgcollection is licensed under the permissive Apache-2.0 license (also reflected in an included LICENSE file) and is fully compatible with PostgreSQL’s own license. This allows for unrestricted use in both open-source and proprietary settings.
+
+Security and Operational Considerations
+Because the data resides naturally in memory context, there is no persistent disk footprint unless explicitly stored. While that reduces I/O risk, overly large or unbounded collections can lead to increased memory use, potentially exhausting session memory. On the operational side, pgcollection introduces no WAL logging overhead unless serialized, simplifying observability and recovery flows. Additionally, AWS provides a SECURITY.md, but some caution is warranted when handling collections that may cross function boundaries or involve complex types.
+
+Alternatives
+Developers have traditionally used built-in constructs such as arrays, jsonb, or temporary tables. Arrays are fast but only support index-based access; jsonb is flexible but slow to parse and lacks deterministic iteration; temporary tables offer SQL-like operations but incur DDL and disk overhead.
+
+By contrast:
+
+pgcollection offers O(1) lookup by virtue of in-memory hashing,
+supports deterministic iteration due to its ordered structure,
+avoids disk I/O entirely in typical use cases,
+and preserves strong typing internally.
+This positions pgcollection as uniquely valuable compared to the alternatives.
+
+Use of uthash
+The key-value mapping is implemented using the uthash C library. This lightweight macro-based tool extends each struct with metadata needed to maintain a hash table. For example, a single use of HASH_ADD(...) behind the scenes injects the entry into a performant O(1) lookup structure. This avoids the need for additional table object management overhead and enables efficient dynamic operations.
+
+5. Path Forward: Adopt or Defer
+
+Adopt pgcollection
+If you are developing functions that require frequent lookups, ordered traversal, or bulk operations in memory—especially in data-intensive workflows such as session caching, ETL logic, or mutable maps—then pgcollection offers compelling advantages. It improves performance, reduces code complexity, enhances observability through custom wait events, and integrates cleanly with PL/pgSQL. While new to the ecosystem, AWS’s stewardship and the permissive license support commercial use.
+
+Defer pgcollection
+If your use cases do not involve complex in-memory object handling, or if the operational environment is constrained by strict extension policies, you may choose to defer adoption. Alternatives, though slower or less elegant, remain fully supported and less maintenance-intensive. Additionally, if preserving familiarity and minimal extension installs are priorities, it may be prudent to wait until pgcollection sees wider adoption or further version maturity.

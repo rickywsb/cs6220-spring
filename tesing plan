@@ -1,0 +1,64 @@
+1  Environment
+
+Tests run on PostgreSQL 17 with the pgcollection extension installed and enabled (CREATE EXTENSION collection;).
+Two psql sessions are required for each scenario:
+
+Session A executes the test block.
+Session B watches pg_stat_activity for custom wait events and collects session statistics from collection_stats.
+Both sessions use the same database and role; \set ON_ERROR_STOP on is enabled so a failure aborts immediately.
+
+2  Methodology
+
+For each scenario:
+
+Reset stats
+In Session A call SELECT collection_stats_reset();.
+Identify backend
+In Session B capture the PID of Session A (SELECT pg_backend_pid();).
+Execute block
+Session A runs the PL/pgSQL block that exercises the feature.
+Observe waits
+While the block runs, Session B repeatedly queries
+SELECT wait_event, count(*)
+  FROM pg_stat_activity
+ WHERE pid = <PID>
+   AND wait_event_type = 'Extension'
+ GROUP BY wait_event;
+Validate stats
+After completion, Session A runs SELECT * FROM collection_stats; and compares counts to expected values.
+Rollback if needed to leave the database unchanged.
+3  Functional Scenarios and Expected Behaviour
+
+Scenario	Action (Session A)	Expected functional outcome	Expected wait‑event pattern	Expected collection_stats
+INSERT / UPDATE / FETCH	Create collection; assign three capitals; fetch 'USA'.	Notice outputs Washington, D.C.. No error.	Several CollectionAdd; one CollectionFetch/CollectionValue.	add = 3, find = 0, context_switch ≈ 1 (flatten at block end).
+Iteration	Use first, next, isnull loop over three entries.	Notices printed in insertion order.	CollectionValue inside loop, one per element.	find = 0, loop adds no new stats; context_switch minimal.
+Sort then Iterate	Insert keys, call sort(c), iterate.	Keys come out Japan, United Kingdom, USA (en_US collation).	One CollectionSort, then CollectionValue events.	sort = 1.
+Bulk DML (to_table)	Populate collection, UPDATE countries ... FROM to_table(c).	Table rows updated to new capitals.	CollectionToTable, CollectionValue events.	context_switch > 0 because data cross context.
+Composite type storage	Cache rows of pg_tablespace in collection, retrieve owner of pg_default.	Notice prints a valid role name.	CollectionAdd per row; later CollectionFetch.	add equals number of rows in pg_tablespace.
+Large insert stress (100 000 keys)	Loop 1..100000 inserting text values.	Block completes; count(c)=100000.	Thousands of CollectionAdd; no flatten until end.	add = 100000, memory growth observed via RSS but no crash.
+Delete and Re‑insert	Insert key; delete it; reinsert.	Final count(c)=1; fetch returns new value.	CollectionDelete, second CollectionAdd.	delete = 1, add = 2.
+Type mismatch	Declare collection('int'); attempt to assign text.	Raises cast error.	Wait events stop at error.	add = 0; stats confirm rollback.
+Persistence round‑trip	INSERT collection into a table column; select back and fetch 'USA'.	Selected collection returns correct value after expand.	CollectionFlatten at insert; CollectionExpand at select; then CollectionFetch.	Two context_switch entries recorded.
+4  Edge‑Case Robustness
+
+NULL key assignment must raise an error; wait‑event stream stops immediately; collection_stats unchanged.
+1 GB size limit is enforced; inserting beyond the limit during a single flatten attempt raises an error and rolls back.
+Concurrent sessions each maintain isolated data; Session B never sees Session A’s keys even with identical names.
+5  Performance Validation
+
+After functional assertions pass, aggregate wait‑event counts and wall‑clock timings are compared with baseline blocks using:
+
+jsonb parsing (jsonb_each_text)
+Temporary tables with equivalent INSERT + SELECT
+The expectation is that for equal data volumes, pgcollection shows lower total wait time and avoids disk‑related waits (IO, BufferPin).
+
+6  Success Criteria
+
+A scenario is successful when:
+
+Functional output matches expectations (correct notices, table rows, or errors).
+Observed wait events align with the intended operations (e.g., a sort triggers exactly one CollectionSort).
+collection_stats counters correspond to the logical number of operations executed.
+No memory leak is detected by inspecting MemoryContextStats() after rollback.
+Performance comparisons show equal or better latency relative to JSONB or temp‑table equivalents.
+Once every scenario meets these criteria, pgcollection can be deemed functionally correct and performant under PostgreSQL 17, and is ready for wider benchmarking or pilot deployment.

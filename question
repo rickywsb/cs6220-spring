@@ -27,3 +27,19 @@ Accessing elements in a collection is straightforward and readable: collection['
 
 5. Built-in iteration tools
 pgcollection supports iterators like first(), next(), key(), and value() to loop over elements in order. This is more natural and efficient than trying to unpack and traverse a JSON structure inside a PL/pgSQL loop. You don’t need to call jsonb_each() or convert JSON into a temporary table — pgcollection provides direct, in-memory iteration.
+
+
+How pgcollection really aligns (or not) with Oracle collection kinds
+Aspect	Oracle VARRAY / Nested‑table	Oracle Associative array	pgcollection reality
+Bounded vs. unbounded	VARRAY is bounded ; Nested‑table is unbounded	Unbounded	Unbounded until memory (or 1 GB when flattened to disk) exhausts – so this matches Nested‑table/associative array behaviour.
+Index/key type	VARRAY/Nested‑table use integer subscripts starting at 1	Can be integer or string	Currently only text keys. You cannot use an integer subscript unless you cast it to text. Future work could add an integer path, but today it is string‑only.
+Sparsity	VARRAY dense, Nested‑table can be sparse after DELETE	Associative arrays can be sparse	pgcollection is hash‑based and therefore naturally sparse. Keys are not required to be contiguous or sequential.
+On‑disk persistence	Nested‑table/ VARRAY columns stored as separate child tables or LOBs, support indexing and query	Associative array cannot be stored in a column	pgcollection can be stored in a column, but as a single varlena blob (max 1 GB) – there is no child table, no column‑level indexing, and the server must fully expand the blob to query it. So it is persistible like a nested table but without relational visibility or indexes.
+Ordering semantics	VARRAY keeps positional order; Nested‑table loses order unless you ORDER BY; Associative array order undefined	pgcollection preserves insertion order until you call sort().	
+Key take‑aways
+Index datatype is indeed only text today.
+All subscripts are stored as strings; an integer must be cast (add(c, '42', 'val')). So your second bullet is correct.
+Persistence is not the same as Oracle nested‑table storage.
+When you put a collection in a column, PostgreSQL stores it as an opaque varlena; you cannot join to it or index inside it without expanding it in every query. Oracle nested tables, by contrast, become real child tables that can be indexed and queried directly.
+Hybrid but closer to an associative array.
+Because keys are hash‑based strings, and because the structure is sparse and unbounded, pgcollection behaves more like Oracle’s associative array than like a nested table—in spite of its ability to be stored on disk. The absence of integer subscripts and relational indexing makes it less like a true nested‑table implementation.

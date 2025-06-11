@@ -134,3 +134,13 @@ ORDER BY id;
 --   2 | (apple,red)
 --     | (banana,yellow)
 
+### Literal‑Constructor Gap and the “phantom OID” pitfall
+
+At present the only SQL‑side constructor for collection is a raw JSON cast, for example
+
+'{"value_type":"pg_catalog.text",
+  "entries":{"USA":"Washington","UK":"London"}}'::collection
+That syntax works only if the string supplied in "value_type" resolves to a real type OID at execution time. If the name is misspelled, schema‑qualified from another database, or omitted altogether the insert still succeeds—the input function merely records whatever OID regtypein() returns—but the first attempt to read the data (to_table(c), value(c), etc.) fails with
+
+ERROR:  type with OID ███████ does not exist
+because the executor cannot locate that phantom OID in the current cluster. This makes hand‑crafted JSON fragile and hard to debug.

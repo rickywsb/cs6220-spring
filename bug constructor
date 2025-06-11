@@ -37,3 +37,13 @@ WHERE  typtype = 'p';               -- 'p'  = pseudo/shell type
    Optional clean‑up: drop the shell type so catalog is tidy
    (replace <OID> with the number you saw)                      */
 -- DELETE FROM pg_type WHERE oid = <OID>;   -- superuser only!
+
+
+-- Find every distinct inner OID stored in the table
+SELECT DISTINCT (c).value_type AS inner_oid
+FROM   (SELECT c FROM coll_bad) s;
+
+-- List shell types (typtype = 'p') so you can match the number
+SELECT oid, typname, nspname, typtype
+FROM   pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+WHERE  typtype = 'p';

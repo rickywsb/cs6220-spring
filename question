@@ -144,3 +144,17 @@ That syntax works only if the string supplied in "value_type" resolves to a real
 
 ERROR:  type with OID ███████ does not exist
 because the executor cannot locate that phantom OID in the current cluster. This makes hand‑crafted JSON fragile and hard to debug.
+
+
+
+Two simple ways to avoid the trap:
+
+Rely on the default – omit the field and let the input routine assume text
+'{"entries":{"USA":"Washington","UK":"London"}}'::collection
+Write the type name unqualified (or fully qualify it in the same database) so the lookup is repeatable:
+'{"value_type":"text","entries":{...}}'::collection
+After inserting with a resolvable type name you can query safely:
+
+SELECT id, to_table(c) AS kv
+FROM   coll_test
+WHERE  id = 1;

@@ -67,3 +67,6 @@ A subtle behavioural quirk is that c[NULL] returns the “current” iterator po
 Finally, collection_cast() merely verifies that the stored value type can be implicitly coerced to the requested typmod; it does not rewrite existing elements. Applications could mis‑cast a text collection to int4 and only hit conversion failures later. Offering a collection_cast_strict(c, 'int4') that attempts to convert every element in place—and fails early if one element is invalid—would close that loophole.
 
 Implementing even a subset of these enhancements—size guardrail, integer subscripts, exposed JSON/variadic constructors, and strict cast mode—would eliminate the most acute surprises, align pgcollection with Oracle semantics, and make the extension safer and easier to adopt in mixed‑workload environments.
+
+
+Because pgcollection treats every element’s value as an opaque varlena blob during serialization (collection_flatten_into) and deserialization (DatumGetExpandedCollection), the code already copies or restores a value’s bytes without caring what the value actually is. If we simply allow value_type to be the collection’s own OID, an element can itself be another flattened collection. 

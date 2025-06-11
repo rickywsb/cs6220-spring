@@ -70,3 +70,67 @@ Implementing even a subset of these enhancements—size guardrail, integer subsc
 
 
 Because pgcollection treats every element’s value as an opaque varlena blob during serialization (collection_flatten_into) and deserialization (DatumGetExpandedCollection), the code already copies or restores a value’s bytes without caring what the value actually is. If we simply allow value_type to be the collection’s own OID, an element can itself be another flattened collection. 
+
+
+
+The current implementation offers exactly one way to build a collection value inside SQL: you must pass a hand‑crafted JSON blob to the type’s native input function ('{"value_type": …, "entries": …}'::collection). Anything more convenient—such as INSERT INTO t VALUES (collection('k1','v1','k2','v2'))—requires dropping into PL/pgSQL and looping through repeated add() calls. That extra procedural code is noisy, slow in large batches, and a stark contrast to Oracle, where developers routinely write nested‑table or VARRAY literals directly in DML or queries. The gap can be closed without touching the storage format: expose a simple SQL wrapper collection_from_json(json text) that forwards to the existing parser, and introduce a variadic collection_lit(VARIADIC any) function that accepts alternating key/value arguments (or even a named‐parameter style) and internally constructs the same CollectionHeader. Because both helpers would return an expanded object datum, they integrate with all existing functions (to_table, sort, etc.) and let users bulk‑insert or select collections in a single, declarative statement—eliminating boilerplate loops while retaining the extension’s high‑performance in‑memory behaviour. 
+
+
+-- fresh sandbox
+DROP TABLE IF EXISTS coll_test;
+CREATE TABLE coll_test(id int, c collection);
+
+------------------------------------------------------------
+-- CASE 1: JSON‑based constructor – the *only* direct path
+------------------------------------------------------------
+INSERT INTO coll_test(id, c)
+VALUES
+(1,
+ '{"value_type":"pg_catalog.text",
+   "entries":{"USA":"Washington","UK":"London"}}'::collection);
+
+-- verify
+SELECT id, to_table(c) AS kv
+FROM coll_test
+ORDER BY id;
+
+-- expected output:
+--  id | kv
+-- ----+----------------------------
+--   1 | (USA,"Washington")
+--     | (UK,London)
+------------------------------------------------------------
+-- CASE 2: attempt a “friendly” key/value literal – should fail
+------------------------------------------------------------
+-- (no function named collection_lit or similar exists)
+SAVEPOINT before_error;
+INSERT INTO coll_test(id, c)
+VALUES (2, collection('k1','v1','k2','v2'));   -- expect ERROR
+ROLLBACK TO before_error;
+
+-- example error message:
+-- ERROR:  function collection(text, text, text, text) does not exist
+------------------------------------------------------------
+-- CASE 3: workaround – build in PL/pgSQL using add()
+------------------------------------------------------------
+DO $$
+DECLARE
+    tmp collection;
+BEGIN
+    tmp := add(tmp, 'apple', 'red');
+    tmp := add(tmp, 'banana', 'yellow');
+    INSERT INTO coll_test VALUES (2, tmp);
+END;
+$$;
+
+SELECT id, to_table(c) AS kv
+FROM coll_test
+ORDER BY id;
+
+-- expected output now includes the second row:
+--  id | kv
+-- ----+----------------------------
+--   1 | (USA,"Washington")...
+--   2 | (apple,red)
+--     | (banana,yellow)
+

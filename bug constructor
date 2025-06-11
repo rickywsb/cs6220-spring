@@ -1,0 +1,39 @@
+/* ---------------------------------------------------------------
+   Validation script: “phantom type” created by bad value_type
+   --------------------------------------------------------------- */
+
+/* 0.  Fresh sandbox  */
+DROP TABLE IF EXISTS coll_bad;
+CREATE TABLE coll_bad(id int, c collection);
+
+/* 1.  Insert JSON that names a non‑existent type ----------------
+        – here we deliberately misspell the catalog + type name.  */
+INSERT INTO coll_bad
+VALUES (1,
+'{
+  "value_type":"missing_schema.missing_type",
+  "entries":{"foo":"bar"}
+}'::collection);
+
+/* 2.  Verify the row is there (no error) */
+SELECT id, pg_typeof(c) FROM coll_bad;
+/* returns: 1 | collection   */
+
+/* 3.  Try to read it – this will ERROR with “type with OID … not exist”  */
+SELECT id, to_table(c) AS kv FROM coll_bad;
+/* expected error:
+   ERROR:  type with OID NNNNNNN does not exist                */
+
+/* 4.  Show the phantom “shell” type that regtypein() created   */
+SELECT oid, typname, nspname, typtype
+FROM   pg_type  t
+JOIN   pg_namespace n ON n.oid = t.typnamespace
+WHERE  typtype = 'p';               -- 'p'  = pseudo/shell type
+
+/* You should see the OID reported in the error above.
+   typtype = 'p' confirms it is only a placeholder.             */
+
+/* ---------------------------------------------------------------
+   Optional clean‑up: drop the shell type so catalog is tidy
+   (replace <OID> with the number you saw)                      */
+-- DELETE FROM pg_type WHERE oid = <OID>;   -- superuser only!

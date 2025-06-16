@@ -62,3 +62,16 @@ collection_stats counters correspond to the logical number of operations execute
 No memory leak is detected by inspecting MemoryContextStats() after rollback.
 Performance comparisons show equal or better latency relative to JSONB or temp‑table equivalents.
 Once every scenario meets these criteria, pgcollection can be deemed functionally correct and performant under PostgreSQL 17, and is ready for wider benchmarking or pilot deployment.
+
+
+DO $$
+DECLARE
+    inner_coll  collection('bigint');   -- avoid reserved word
+    outer_coll  collection('collection');
+BEGIN
+    inner_coll := add(inner_coll, 'k', '42');      -- build inner
+    outer_coll := add(outer_coll, 'nest', inner_coll);  -- store inner
+
+    RAISE NOTICE 'Outer[nest][k] by two steps = %',
+                 (add(NULL,'tmp', outer_coll)['nest'])['k'];
+END $$;

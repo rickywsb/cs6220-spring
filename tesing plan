@@ -75,3 +75,33 @@ BEGIN
     RAISE NOTICE 'Outer[nest][k] by two steps = %',
                  (add(NULL,'tmp', outer_coll)['nest'])['k'];
 END $$;
+
+
+DO $$
+DECLARE
+    inner_coll  collection('bigint');
+    outer_coll  collection('collection');
+    tmp_coll    collection('bigint');   -- proxy variable
+BEGIN
+    ------------------------------------------------------------------
+    -- 1. build the nested structure
+    ------------------------------------------------------------------
+    inner_coll := add(inner_coll, 'k', '42');      -- inner collection
+    outer_coll := add(outer_coll, 'nest', inner_coll);   -- store inside
+
+    ------------------------------------------------------------------
+    -- 2. show that direct chaining FAILS
+    ------------------------------------------------------------------
+    BEGIN
+        RAISE NOTICE 'Trying direct subscript …';
+        RAISE NOTICE '%', outer_coll['nest']['k'];     -- this line
+    EXCEPTION WHEN others THEN
+        RAISE NOTICE 'Expected error: %', SQLERRM;     -- ← “only one subscript”
+    END;
+
+    ------------------------------------------------------------------
+    -- 3. use a proxy variable (works)
+    ------------------------------------------------------------------
+    tmp_coll := outer_coll['nest'];   -- first hop
+    RAISE NOTICE 'outer_coll[nest][k] = %', tmp_coll['k'];  -- second hop
+END $$;

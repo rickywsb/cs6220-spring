@@ -77,31 +77,44 @@ BEGIN
 END $$;
 
 
+-- Make sure the extension is loaded
+CREATE EXTENSION IF NOT EXISTS collection;
+
 DO $$
 DECLARE
-    inner_coll  collection('bigint');
-    outer_coll  collection('collection');
-    tmp_coll    collection('bigint');   -- proxy variable
+    inner_coll  collection('bigint');     -- inner: keys → bigint values
+    outer_coll  collection('collection'); -- outer: keys → collection values
+    tmp_coll    collection('bigint');     -- helper variable
 BEGIN
     ------------------------------------------------------------------
-    -- 1. build the nested structure
+    -- 1.  Build the inner collection, storing a bigint value (42)
     ------------------------------------------------------------------
-    inner_coll := add(inner_coll, 'k', '42');      -- inner collection
-    outer_coll := add(outer_coll, 'nest', inner_coll);   -- store inside
+    inner_coll := add(inner_coll, 'k', 42);
 
     ------------------------------------------------------------------
-    -- 2. show that direct chaining FAILS
+    -- 2.  Store the inner collection inside the outer collection
+    ------------------------------------------------------------------
+    outer_coll := add(outer_coll, 'nest', inner_coll);
+
+    ------------------------------------------------------------------
+    -- 3a. Show that one-level subscript works
+    ------------------------------------------------------------------
+    RAISE NOTICE 'outer_coll[''nest''] = %', outer_coll['nest'];
+
+    ------------------------------------------------------------------
+    -- 3b. Attempt to chain subscripts (expected to fail today)
     ------------------------------------------------------------------
     BEGIN
-        RAISE NOTICE 'Trying direct subscript …';
-        RAISE NOTICE '%', outer_coll['nest']['k'];     -- this line
-    EXCEPTION WHEN others THEN
-        RAISE NOTICE 'Expected error: %', SQLERRM;     -- ← “only one subscript”
+        RAISE NOTICE 'trying outer_coll[''nest''][''k''] …';
+        RAISE NOTICE '%', outer_coll['nest']['k'];     -- will error
+    EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'expected error: %', SQLERRM;     -- shows current limit
     END;
 
     ------------------------------------------------------------------
-    -- 3. use a proxy variable (works)
+    -- 4. Work-around: use a helper variable, then subscript again
     ------------------------------------------------------------------
-    tmp_coll := outer_coll['nest'];   -- first hop
-    RAISE NOTICE 'outer_coll[nest][k] = %', tmp_coll['k'];  -- second hop
+    tmp_coll := outer_coll['nest'];        -- first hop
+    RAISE NOTICE 'outer_coll[nest][k] = %', tmp_coll['k'];  -- second hop OK
 END $$;
+

@@ -125,3 +125,13 @@ With pgcollection the data can already be stored just as easily—our test inser
 
 Because storage works and the limitation is purely syntactic, the fix is conceptually simple: either loosen the existing handler to accept an arbitrary number of subscripts, or introduce a single path function—say find_path(coll, variadic text[])—that walks the nested headers recursively. A defensive GUC can cap the maximum depth (default 3) to prevent runaway recursion and memory use. Once such an accessor is in place, pgcollection will match Oracle’s practical nesting capability without forcing users to copy the inner collection into a temporary PL/pgSQL variable or to unnest step-by-step.
 
+
+Hey Jimbo,
+
+As the RPG and APG teams continue evaluating whether pgcollection should ship in our RDS build, Shammeem and I have compared notes and distilled three gaps that surfaced during testing. They are summarised below; the full technical trace is in the investigation doc, but we would value your insight on whether the current design already plans a fix or if you see a cleaner approach.
+
+First, when we insert a row with a JSON literal such as '{ "entries": { "France":"Paris","Germany":"Berlin"} }'::collection, the write succeeds yet any later SELECT … to_table(c) fails with “type with OID xxxxx does not exist.” Our reading of collection_in() and regtypein() suggests the input routine creates an unresolved shell type when the value_type field is omitted or miss-spelled, so a stray OID appears in the on-disk value; do you agree that guarding the parser with to_regtype() or validating the OID before colhdr->value_type = typid would prevent this?
+
+Second, the subscript transformer currently coerces every key to text, which blocks common Oracle patterns that index associative arrays by integers. Adding an alternate typemod, for example collection_int_key, would let the handler accept int4/int8 directly, avoid per-call casts, and allow the planner to use numeric equality instead of string comparison. Are there performance or catalogue-bloat concerns we should weigh before pursuing that extension?
+
+Third, pgcollection stores a collection inside another collection just fine, but a chained reference such as outer_coll['nest']['k'] still throws “collection allows only one subscript.” We worked around the limit by copying the inner set to a temporary variable, yet a native solution—either loosening the SubscriptingRef code to accept multiple bracket pairs or exposing a find_path(coll, variadic text[]) helper—would get us much closer to Oracle’s nested-table ergonomics. Do you see a downside to allowing multi-level navigation, and would a depth cap (say three levels) be sufficient to guard against runaway recursion?

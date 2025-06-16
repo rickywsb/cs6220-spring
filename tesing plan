@@ -80,41 +80,43 @@ END $$;
 -- Make sure the extension is loaded
 CREATE EXTENSION IF NOT EXISTS collection;
 
+CREATE EXTENSION IF NOT EXISTS collection;
+
 DO $$
 DECLARE
-    inner_coll  collection('bigint');     -- inner: keys → bigint values
-    outer_coll  collection('collection'); -- outer: keys → collection values
-    tmp_coll    collection('bigint');     -- helper variable
+    inner_coll  collection('bigint');     -- inner: bigint values
+    outer_coll  collection('collection'); -- outer: collection values
+    tmp_coll    collection('bigint');     -- helper
 BEGIN
     ------------------------------------------------------------------
-    -- 1.  Build the inner collection, storing a bigint value (42)
+    -- Build inner collection (explicit bigint literal)
     ------------------------------------------------------------------
-    inner_coll := add(inner_coll, 'k', 42);
+    inner_coll := add(inner_coll, 'k', 42::bigint);
 
     ------------------------------------------------------------------
-    -- 2.  Store the inner collection inside the outer collection
+    -- Store inner inside outer
     ------------------------------------------------------------------
     outer_coll := add(outer_coll, 'nest', inner_coll);
 
     ------------------------------------------------------------------
-    -- 3a. Show that one-level subscript works
+    -- Show one-level access works
     ------------------------------------------------------------------
     RAISE NOTICE 'outer_coll[''nest''] = %', outer_coll['nest'];
 
     ------------------------------------------------------------------
-    -- 3b. Attempt to chain subscripts (expected to fail today)
+    -- Attempt chained subscript (expected to fail today)
     ------------------------------------------------------------------
     BEGIN
         RAISE NOTICE 'trying outer_coll[''nest''][''k''] …';
-        RAISE NOTICE '%', outer_coll['nest']['k'];     -- will error
+        RAISE NOTICE '%', outer_coll['nest']['k'];
     EXCEPTION WHEN OTHERS THEN
-        RAISE NOTICE 'expected error: %', SQLERRM;     -- shows current limit
+        RAISE NOTICE 'expected error: %', SQLERRM;
     END;
 
     ------------------------------------------------------------------
-    -- 4. Work-around: use a helper variable, then subscript again
+    -- Work-around via helper variable (succeeds)
     ------------------------------------------------------------------
-    tmp_coll := outer_coll['nest'];        -- first hop
-    RAISE NOTICE 'outer_coll[nest][k] = %', tmp_coll['k'];  -- second hop OK
+    tmp_coll := outer_coll['nest'];
+    RAISE NOTICE 'outer_coll[nest][k] = %', tmp_coll['k'];
 END $$;
 

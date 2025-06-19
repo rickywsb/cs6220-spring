@@ -1,3 +1,77 @@
+DO $$
+DECLARE
+    -- test sizes
+    sizes          int[] := ARRAY[1000, 5000, 10000, 20000];
+    -- loop variables
+    n              int;
+    i              int;
+    --
+    coll           collection('text');
+    jdoc           jsonb := '{}'::jsonb;
+    --
+    t_start        timestamp;
+    t_end          timestamp;
+    ins_coll       interval;
+    ins_json       interval;
+    look_coll      interval;
+    look_json      interval;
+BEGIN
+    FOREACH n IN ARRAY sizes LOOP
+        ------------------------------------------------------------------
+        -- rebuild containers for this tier
+        ------------------------------------------------------------------
+        coll := NULL;
+        jdoc := '{}'::jsonb;
+
+        ------------------------------------------------------------------
+        -- 1) INSERTION BENCHMARK
+        ------------------------------------------------------------------
+        t_start := clock_timestamp();
+        FOR i IN 1..n LOOP
+            IF i = 1 THEN
+                coll := add(NULL, i::text, 'v'||i);
+            ELSE
+                coll := add(coll, i::text, 'v'||i);
+            END IF;
+        END LOOP;
+        ins_coll := clock_timestamp() - t_start;
+
+        t_start := clock_timestamp();
+        FOR i IN 1..n LOOP
+            jdoc := jdoc || jsonb_build_object(i::text, 'v'||i);
+        END LOOP;
+        ins_json := clock_timestamp() - t_start;
+
+        ------------------------------------------------------------------
+        -- 2) LOOKUP BENCHMARK (10 000 random gets)
+        ------------------------------------------------------------------
+        t_start := clock_timestamp();
+        FOR i IN 1..10000 LOOP
+            PERFORM coll[(1 + trunc(random() * (n-1)))::int::text];
+        END LOOP;
+        look_coll := clock_timestamp() - t_start;
+
+        t_start := clock_timestamp();
+        FOR i IN 1..10000 LOOP
+            PERFORM (jdoc ->> (1 + trunc(random() * (n-1)))::int::text);
+        END LOOP;
+        look_json := clock_timestamp() - t_start;
+
+        ------------------------------------------------------------------
+        -- report
+        ------------------------------------------------------------------
+        RAISE NOTICE '----- %,000 rows -----', n/1000;
+        RAISE NOTICE 'insert:  collection = %,  jsonb = %',
+                     ins_coll, ins_json;
+        RAISE NOTICE 'lookup:  collection = %,  jsonb = %',
+                     look_coll, look_json;
+    END LOOP;
+END $$;
+
+
+
+
+
 1  Environment
 
 Tests run on PostgreSQL 17 with the pgcollection extension installed and enabled (CREATE EXTENSION collection;).
